@@ -108,6 +108,24 @@ def init_one_county(init_record: CountyInitRecord):
         init_one_street_community(city_code, county_code, street)
 
 
+def parse_detail(html):
+    # TODO
+    return Community()
+
+
+def perfect_community_info(city_code, lianjia_id):
+    html = get_content(COMMUNITY_DETAIL.format(city_code, lianjia_id))
+    community = parse_detail(html)
+    db_community = session.query(Community).filter(Community.lianjia_id == lianjia_id).one()
+    if db_community:
+        session \
+            .query(Community) \
+            .filter(Community.lianjia_id == community.lianjia_id) \
+            .update({})  # TODO
+    else:
+        session.add(community)
+
+
 if __name__ == '__main__':
     session = DBSession()
     # initRecord = CountyInitRecord(county_id=1852,
