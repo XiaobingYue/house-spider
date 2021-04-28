@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 from urllib import request
+from urllib.error import URLError
 
 from bs4 import BeautifulSoup
 
@@ -15,8 +16,12 @@ def get_content(to_url):
     req = request.Request(
         url=to_url
     )
-    response = request.urlopen(req, timeout=15)
-    return response.read()
+    try:
+        response = request.urlopen(req, timeout=15)
+        return response.read()
+    except URLError as e:
+        print('获取html失败：{%s}' % e.reason)
+    return None
 
 
 def open_file():
@@ -72,6 +77,8 @@ def init_or_update_county_info():
 
 def init_one_street_community(city_code, county_code, street):
     html = get_content(COMMUNITY_LIST.format(city_code, street.code, '1'))
+    if not html:
+        return
     total = total_page(html)
     print('街道名：%s,总页数：%s' % (street.name, total))
     if total == 0:
@@ -79,6 +86,8 @@ def init_one_street_community(city_code, county_code, street):
     for i in range(0, total):
         i = i + 1
         htm = get_content(COMMUNITY_LIST.format(city_code, street.code, i))
+        if not htm:
+            return
         community_list = parse_list(htm)
         print('本页解析出%s条小区数据' % len(community_list))
         for c in community_list:
@@ -108,20 +117,49 @@ def init_one_county(init_record: CountyInitRecord):
         init_one_street_community(city_code, county_code, street)
 
 
-def parse_detail(html):
-    # TODO
-    return Community()
+def parse_detail(lianjia_id, html):
+    community = Community(lianjia_id=lianjia_id)
+    item_types = {
+        '建筑类型': 'building_type',
+        '物业费用': 'property_fee',
+        '物业公司': 'property_company',
+        '开发商': 'develop_company',
+        '楼栋总数': 'building_num',
+        '房屋总数': 'house_num'
+    }
+    bs = BeautifulSoup(html, 'html.parser')
+    info_items = bs.find_all('div', attrs={'class', 'xiaoquInfoItem'})
+    for item in info_items:
+        span_list = item.find_all('span')
+
+        if len(span_list) == 2 and span_list[0].string in item_types:
+            pro_name = item_types.get(span_list[0].string)
+            pro_value = span_list[-1].string.strip()
+            if 'building_num' == pro_name or 'house_num' == pro_name:
+                pro_value = str2num(pro_value)
+            community.__setattr__(pro_name, pro_value)
+        else:
+            print('解析小区基本信息异常，原始html：[%s]' % span_list)
+    return community
 
 
 def perfect_community_info(city_code, lianjia_id):
     html = get_content(COMMUNITY_DETAIL.format(city_code, lianjia_id))
-    community = parse_detail(html)
+    if not html:
+        return
+    community = parse_detail(lianjia_id, html)
     db_community = session.query(Community).filter(Community.lianjia_id == lianjia_id).one()
     if db_community:
         session \
             .query(Community) \
             .filter(Community.lianjia_id == community.lianjia_id) \
-            .update({})  # TODO
+            .update({'building_type': community.building_type,
+                     'property_fee': community.property_fee,
+                     'property_company': community.property_company,
+                     'develop_company': community.develop_company,
+                     'building_num': community.building_num,
+                     'house_num': community.house_num
+                     })
     else:
         session.add(community)
 
@@ -143,7 +181,10 @@ if __name__ == '__main__':
     # session.add(initRecord)
     # county_init_list = session.query(CountyInitRecord).all()
     # session.commit()
-    init_or_update_county_info()
+    # init_or_update_county_info()
+    c_list = session.query(Community).all()
+    for c in c_list:
+        perfect_community_info(c.city_code, c.lianjia_id)
     session.commit()
     session.close()
     # print(len(county_init_list))
