@@ -10,6 +10,7 @@ COMMUNITY_LIST = 'https://{0}.ke.com/xiaoqu/{1}/pg{2}/'
 
 COMMUNITY_DETAIL = 'https://{0}.ke.com/xiaoqu/{1}/'
 
+
 def get_content(to_url):
     req = request.Request(
         url=to_url
@@ -32,7 +33,6 @@ def total_page(html):
         return int(page_info.get('totalPage', 0))
     else:
         return 0
-
 
 
 def parse_list(html):
@@ -59,6 +59,7 @@ def parse_list(html):
                                         reference_price=recent_sale_price))
     return community_list
 
+
 def str2num(str_):
     return int(''.join(x for x in str_.strip() if x.isdigit()))
 
@@ -72,14 +73,14 @@ def init_or_update_county_info():
 def init_one_street_community(city_code, county_code, street):
     html = get_content(COMMUNITY_LIST.format(city_code, street.code, '1'))
     total = total_page(html)
-    print('总页数：%s' % total)
+    print('街道名：%s,总页数：%s' % (street.name, total))
     if total == 0:
         return
     for i in range(0, total):
         i = i + 1
         htm = get_content(COMMUNITY_LIST.format(city_code, street.code, i))
         community_list = parse_list(htm)
-        print('本页解析出%s条数据' % len(community_list))
+        print('本页解析出%s条小区数据' % len(community_list))
         for c in community_list:
             c.city_code = city_code
             c.county_code = county_code
@@ -102,9 +103,9 @@ def init_one_county(init_record: CountyInitRecord):
     county_code = init_record.county_code
     city_code = init_record.city_code
     street_list = session.query(Street).filter(Street.county_code == county_code, Street.city_code == city_code).all()
+    print('city:[%s],county:[%s],查询出[%s]条街道数量' % (init_record.city_name, init_record.county_name, len(street_list)))
     for street in street_list:
         init_one_street_community(city_code, county_code, street)
-
 
 
 if __name__ == '__main__':
